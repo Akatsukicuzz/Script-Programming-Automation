@@ -1,0 +1,4 @@
+   dataset/**/augmented/
+   augmentation_manifest.csv
+   __pycache__/
+   *.pyc
