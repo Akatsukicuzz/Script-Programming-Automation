@@ -1,5 +1,5 @@
 # Dataset Augmentation Script Program
-# Head Hanchos: Abdirahman Gaal, <put your names here when you see this>
+# Authors: Abdirahman Gaal, Esther Kreutzfeldt, Steven Bonilla
 
 import sys
 import os
