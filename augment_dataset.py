@@ -3,7 +3,8 @@
 
 import sys
 import os
-import random 
+import random
+import shutil
 
 def is_eligible(path):
     name = os.path.basename(path)
@@ -20,12 +21,11 @@ def list_eligible_files(root, output_dir):
     for folder, subfolders, filenames in os.walk(root):
 
         subfolders[:] = [
-           s for s in subfolders 
+           s for s in subfolders
            if not s.startswith(".")
            and os.path.abspath(os.path.join(folder, s)) != output_abs
             ]
 
-       
         for filename in filenames:
             full_path = os.path.join(folder, filename)
             if is_eligible(full_path):
@@ -54,14 +54,26 @@ def build_selection(sources, needed):
     return selection
 
 
-def generate_names(count, sources):
-    """Unique random numeric IDs, sorted ascending, extension kept. TODO"""
-    pass
+def generate_names(count):
+    name = [] #creating an empyt list that will store the random numeric names.
+    countNumber = len(count)
+    for i in range (countNumber):
+        numericID = random.randint(10,99) #creates a random numeric ID that will become the copied files name. 
+        while numericID in name: #making sure the number has not been picked already. 
+            numericID = random.randint(10,99)
+        
+        name.append(numericID)
 
+    name.sort() #sort the list is numeric order. 
+    return name
 
 def copy_files(selection, names, output_dir):
-    """Copy without overwriting. TODO"""
-    pass
+    eligibleFiles = len(selection)
+    
+    for i in range(eligibleFiles): 
+        traceableName = selection[i].split("R")
+        destination = os.path.join(output_dir, str(names[i])+"_"+traceableName[1]) 
+        shutil.copy2(selection[i],destination)
 
 
 def set_dates(files):
@@ -95,15 +107,20 @@ def main():
     print(f"Loading dataset from: {dataset_path}")
 
     eligible_files = list_eligible_files(dataset_path, output_dir)
+                                                                    #eligible_files returns an integer value. 
 
     print("Original file count: N = ", len(eligible_files))
 
     try:
-        build_selection([],5)
+        build_selection([], 5)
     except ValueError as error:
         print("Edge case test:", error)
 
-    
+    sourceList = build_selection(eligible_files, len(eligible_files))
+
+    generatedNames = generate_names(sourceList)
+    os.makedirs(output_dir, exist_ok=True)
+    copy_files(sourceList, generatedNames, output_dir)
 
 if __name__ == "__main__":
     main()
