@@ -4,6 +4,7 @@
 import sys
 import os
 import random 
+from datetime import datetime
 
 def is_eligible(path):
     name = os.path.basename(path)
@@ -65,8 +66,21 @@ def copy_files(selection, names, output_dir):
 
 
 def set_dates(files):
-    """10th of previous month, mtime/atime. TODO"""
-    pass
+    """10th of previous month, mtime/atime."""
+    now = datetime.now()
+
+    if now.month == 1:
+        year = now.year - 1
+        month = 12
+    else:
+        year = now.year
+        month = now.month - 1
+
+    target_date = datetime(year, month, 10)
+    timestamp = target_date.timestamp()
+
+    for file in files:
+        os.utime(file, (timestamp, timestamp))
 
 
 def verify_and_report():
@@ -98,12 +112,17 @@ def main():
 
     print("Original file count: N = ", len(eligible_files))
 
-    try:
-        build_selection([],5)
-    except ValueError as error:
-        print("Edge case test:", error)
+    # temporary test for set_dates
+    test_file = "date_test.txt"
 
-    
+    with open(test_file, "w") as f:
+        f.write("Testing set_dates")
+
+    set_dates([test_file])
+
+    print("Test modified date", datetime.fromtimestamp(os.path.getmtime(test_file)))
+
+    os.remove(test_file)
 
 if __name__ == "__main__":
     main()
