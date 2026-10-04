@@ -35,15 +35,21 @@ def list_eligible_files(root, output_dir):
 
 
 def build_selection(sources, needed):
-    """Shuffled cycles, no repeats within a cycle. TODO"""
+    """Shuffled cycles, no repeats within a cycle."""
+    if needed <= 0:
+        return []
+
+    if not sources:
+        raise ValueError("Cannot build selection: no eligible sources files.")
+    
     selection = []
 
     while len(selection) < needed:
         cycle = sources.copy()
         random.shuffle(cycle)
 
-        remaining = needed - len(selection)
-        selection.extend(cycle[:remaining])
+        remaining_needed  = needed - len(selection)
+        selection.extend(cycle[:remaining_needed])
 
     return selection
 
@@ -92,6 +98,10 @@ def main():
 
     print("Original file count: N = ", len(eligible_files))
 
+    try:
+        build_selection([],5)
+    except ValueError as error:
+        print("Edge case test:", error)
 
     
 
