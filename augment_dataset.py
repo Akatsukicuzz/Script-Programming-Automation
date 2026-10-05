@@ -82,10 +82,44 @@ def set_dates(files):
     for file in files:
         os.utime(file, (timestamp, timestamp))
 
+    return timestamp
 
-def verify_and_report():
-    """Counts, order, dates, originals unchanged, final summary. TODO"""
-    pass
+def verify_and_report(originals, generated, output_dir, snapshot, target_ts):
+    n = len(originals)
+    new = len(generated)
+
+    counts_ok = (new == n) and (len(os.listdir(output_dir)) == n)
+
+    dates_ok = all(int(os.path.getmtime(f)) == int(target_ts) for f in generated)
+
+    originals_ok = all(
+        (os.path.getsize(path), os.path.getmtime(path)) == snapshot[path] for path in snapshot)
+
+    numbers = [int(os.path.basename(f).split(".")[0]) for f in generated]
+    names_ok = (len(set(numbers)) == len(numbers)) and (numbers == sorted(numbers))
+
+    # summary
+    all_ok = counts_ok and dates_ok and originals_ok and names_ok
+
+    print("=" * 50)
+    print("FINAL SUMMARY")
+    print(f"Original file count: N = {n}")
+    print(f"Generated files:     {new}")
+    print(f"Final dataset size:  {n + new}  (2N)")
+    print(f"Output path:         {output_dir}")
+    print(f"Target date:         {datetime.fromtimestamp(target_ts)}")
+    print(f"Counts OK:           {'PASS' if counts_ok else 'FAIL'}")
+    print(f"Dates OK:            {'PASS' if dates_ok else 'FAIL'}")
+    print(f"Originals unchanged: {'PASS' if originals_ok else 'FAIL'}")
+    print(f"Names OK:            {'PASS' if names_ok else 'FAIL'}")
+    print("=" * 50)
+
+    return all_ok
+def take_snapshot(files):
+    snapshot = {}
+    for path in files:
+        snapshot[path] = (os.path.getsize(path), os.path.getmtime(path))
+    return snapshot
 
 def main():
 
@@ -110,6 +144,8 @@ def main():
 
     eligible_files = list_eligible_files(dataset_path, output_dir)
 
+    snapshot = take_snapshot(eligible_files)
+
     print("Original file count: N = ", len(eligible_files))
 
     # temporary test for set_dates
@@ -123,6 +159,9 @@ def main():
     print("Test modified date", datetime.fromtimestamp(os.path.getmtime(test_file)))
 
     os.remove(test_file)
+
+    target_ts = set_dates(generated) 
+    verify_and_report(eligible_files, generated, output_dir, snapshot, target_ts)
 
 if __name__ == "__main__":
     main()
