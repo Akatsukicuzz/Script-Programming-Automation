@@ -156,7 +156,8 @@ def verify_and_report(originals, selection, generated, output_dir, snapshot, tar
     print(f"No cycle repeats:    {'PASS' if cycles_ok else 'FAIL'}") 
     print(f"Dates OK:            {'PASS' if dates_ok else 'FAIL'}")
     print(f"Originals unchanged: {'PASS' if originals_ok else 'FAIL'}")
-    print(f"Names OK:            {'PASS' if names_ok else 'FAIL'}")   
+    print(f"Names OK:            {'PASS' if names_ok else 'FAIL'}")
+    print(f"OVERALL STATUS:      {'SUCCESS' if all_ok else 'FAILED'}")
     print("=" * 50)
 
     return all_ok
