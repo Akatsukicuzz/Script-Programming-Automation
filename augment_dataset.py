@@ -6,6 +6,7 @@ import os
 import random 
 import shutil
 from datetime import datetime
+import csv
 
 def is_eligible(path):
     name = os.path.basename(path)
@@ -37,7 +38,6 @@ def list_eligible_files(root, output_dir):
 
 
 def build_selection(sources, needed):
-    """Shuffled cycles, no repeats within a cycle."""
     if needed <= 0:
         return []
 
@@ -45,31 +45,29 @@ def build_selection(sources, needed):
         raise ValueError("Cannot build selection: no eligible sources files.")
     
     selection = []
+    cycle_number = 0 
 
     while len(selection) < needed:
+        cycle_number +=1
         cycle = sources.copy()
         random.shuffle(cycle)
 
         remaining_needed  = needed - len(selection)
-        selection.extend(cycle[:remaining_needed])
+        for source in cycle[:remaining_needed]:
+            selection.append((source, cycle_number))
 
     return selection
 
 
 def generate_names(selection, output_dir):
     name = [] #creating an empyt list that will store the random numeric names.
-    countNumber = len(selection)
 
-    for i in range (countNumber):
+    existing = os.listdir(output_dir)
+
+    for i in range (len(selection)):
         numericID = random.randint(10,1000) #creates a random numeric ID that will become the copied files name.     
-        path = os.path.join(output_dir, str(numericID)+"_"+selection[i])
-        if os.listdir(output_dir) == 0: 
-            while numericID in name: #making sure the number has not been picked already. 
+        while numericID in name or any(f.startswith(str(numericID) + "_") for f in existing): #making sure the number has not been picked already. 
                  numericID = random.randint(10,1000)
-        else:         
-            for filename in os.listdir(output_dir):
-                if str(numericID) in filename or numericID in name: 
-                    numericID = random.randint(10,1000) #creates a random numeric ID that will become the copied files name.     
         
         name.append(numericID)
 
@@ -77,19 +75,25 @@ def generate_names(selection, output_dir):
     return name
 
 def copy_files(selection, names, output_dir):
+    generated = []
+
     eligibleFiles = len(selection)
     
     for i in range(eligibleFiles): 
         # traceableName = selection[i].split("R") #making the file traceable to the source file by including the numeric value from the source file. 
         traceableName = os.path.basename(selection[i]) #making the file traceable to the source file by including the numeric value from the source file. 
         destination = os.path.join(output_dir, str(names[i])+"_"+traceableName) 
-        
-        # print(destination)
+
+        # never overwrite
+        if os.path.exists(destination):          
+            raise FileExistsError(f"Refusing to overwrite: {destination}")  
+ 
         shutil.copy2(selection[i],destination)
-    sorted(os.listdir(output_dir), key=lambda filename: int(filename.split("_")[0])) #sorting the directory into numerical order. 
+        generated.append(destination)           
+ 
+    return generated                   
 
 def set_dates(files):
-    """10th of previous month, mtime/atime."""
     now = datetime.now()
 
     if now.month == 1:
@@ -105,10 +109,80 @@ def set_dates(files):
     for file in files:
         os.utime(file, (timestamp, timestamp))
 
+    return timestamp
 
-def verify_and_report():
-    """Counts, order, dates, originals unchanged, final summary. TODO"""
-    pass
+def verify_cycles(selection):
+    seen = set()
+
+    for source, cycle in selection:
+        key = (cycle, source)
+
+        if key in seen:
+            return False
+
+        seen.add(key)
+
+    return True
+
+def verify_and_report(originals, selection, generated, output_dir, snapshot, target_ts):
+    n = len(originals)
+    new = len(generated)
+
+    counts_ok = (new == n) and (len(os.listdir(output_dir)) == n)
+
+    dates_ok = all(int(os.path.getmtime(f)) == int(target_ts) for f in generated)
+
+    originals_ok = all(
+        (os.path.getsize(path), os.path.getmtime(path)) == snapshot[path] for path in snapshot)
+
+    numbers = [int(os.path.basename(f).split("_")[0]) for f in generated]
+
+    names_ok = (len(set(numbers)) == len(numbers)) and (numbers == sorted(numbers))
+    
+   
+    cycles_ok = verify_cycles(selection)
+
+    # summary
+    all_ok = counts_ok and dates_ok and originals_ok and names_ok and cycles_ok 
+
+    print("=" * 50)
+    print("Summary")
+    print(f"Original file count: N = {n}")
+    print(f"Generated files:     {new}")
+    print(f"Final dataset size:  {n + new}  (2N)")
+    print(f"Output path:         {output_dir}")
+    print(f"Target date:         {datetime.fromtimestamp(target_ts)}")
+    print(f"Counts OK:           {'PASS' if counts_ok else 'FAIL'}")
+    print(f"No cycle repeats:    {'PASS' if cycles_ok else 'FAIL'}") 
+    print(f"Dates OK:            {'PASS' if dates_ok else 'FAIL'}")
+    print(f"Originals unchanged: {'PASS' if originals_ok else 'FAIL'}")
+    print(f"Names OK:            {'PASS' if names_ok else 'FAIL'}")
+    print(f"OVERALL STATUS:      {'SUCCESS' if all_ok else 'FAILED'}")
+    print("=" * 50)
+
+    return all_ok
+
+def take_snapshot(files):
+    snapshot = {}
+    for path in files:
+        snapshot[path] = (os.path.getsize(path), os.path.getmtime(path))
+
+    return snapshot
+
+def write_manifest(selection, generated, dataset_path, manifest_path):
+    # Saved record: new file -> source file -> cycle
+    with open(manifest_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["new_file", "source_file", "cycle"])
+        for (source, cycle), new_path in zip(selection, generated):
+            writer.writerow([
+                os.path.basename(new_path),
+                os.path.relpath(source, dataset_path),
+                cycle
+            ])
+
+
+ 
 
 def main():
 
@@ -128,31 +202,41 @@ def main():
 
     #using full path
     output_dir = os.path.join(dataset_path, "augmented")
+    manifest_path = "augmentation_manifest.csv"
+
 
     print(f"Loading dataset from: {dataset_path}")
 
     eligible_files = list_eligible_files(dataset_path, output_dir)
 
+    snapshot = take_snapshot(eligible_files)
+
     print("Original file count: N = ", len(eligible_files))
 
-    # temporary test for set_dates
-    test_file = "date_test.txt"
-
-    with open(test_file, "w") as f:
-        f.write("Testing set_dates")
-
+    if os.path.isdir(output_dir) and os.listdir(output_dir):
+        print(f"Error: output folder '{output_dir}' is not empty.")
+        print("Remove it or move its files before running again.")
+        sys.exit(1)
 
     os.makedirs(output_dir, exist_ok=True)
-    sourceList = build_selection(eligible_files, len(eligible_files))
+
+    selection = build_selection(eligible_files, len(eligible_files))
+
+    sourceList = [source for source, cycle in selection] 
+
     generatedNames = generate_names(sourceList, output_dir)
-    
-    copy_files(sourceList, generatedNames, output_dir)
 
-    set_dates([test_file])
+    generated = copy_files(sourceList, generatedNames, output_dir)
 
-    print("Test modified date", datetime.fromtimestamp(os.path.getmtime(test_file)))
+    write_manifest(selection, generated, dataset_path, manifest_path)
+    print(f"Manifest written to: {manifest_path}")
 
-    os.remove(test_file)
+    target_ts = set_dates(generated) 
+
+    ok = verify_and_report(eligible_files, selection, generated, output_dir, snapshot, target_ts)
+
+    if not ok:
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
