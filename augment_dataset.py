@@ -4,6 +4,7 @@
 import sys
 import os
 import random 
+import shutil
 from datetime import datetime
 
 def is_eligible(path):
@@ -55,15 +56,37 @@ def build_selection(sources, needed):
     return selection
 
 
-def generate_names(count, sources):
-    """Unique random numeric IDs, sorted ascending, extension kept. TODO"""
-    pass
+def generate_names(selection, output_dir):
+    name = [] #creating an empyt list that will store the random numeric names.
+    countNumber = len(selection)
 
+    for i in range (countNumber):
+        numericID = random.randint(10,1000) #creates a random numeric ID that will become the copied files name.     
+        path = os.path.join(output_dir, str(numericID)+"_"+selection[i])
+        if os.listdir(output_dir) == 0: 
+            while numericID in name: #making sure the number has not been picked already. 
+                 numericID = random.randint(10,1000)
+        else:         
+            for filename in os.listdir(output_dir):
+                if str(numericID) in filename or numericID in name: 
+                    numericID = random.randint(10,1000) #creates a random numeric ID that will become the copied files name.     
+        
+        name.append(numericID)
+
+    name.sort() #sort the list is numeric order. 
+    return name
 
 def copy_files(selection, names, output_dir):
-    """Copy without overwriting. TODO"""
-    pass
-
+    eligibleFiles = len(selection)
+    
+    for i in range(eligibleFiles): 
+        # traceableName = selection[i].split("R") #making the file traceable to the source file by including the numeric value from the source file. 
+        traceableName = os.path.basename(selection[i]) #making the file traceable to the source file by including the numeric value from the source file. 
+        destination = os.path.join(output_dir, str(names[i])+"_"+traceableName) 
+        
+        # print(destination)
+        shutil.copy2(selection[i],destination)
+    sorted(os.listdir(output_dir), key=lambda filename: int(filename.split("_")[0])) #sorting the directory into numerical order. 
 
 def set_dates(files):
     """10th of previous month, mtime/atime."""
@@ -117,6 +140,13 @@ def main():
 
     with open(test_file, "w") as f:
         f.write("Testing set_dates")
+
+
+    os.makedirs(output_dir, exist_ok=True)
+    sourceList = build_selection(eligible_files, len(eligible_files))
+    generatedNames = generate_names(sourceList, output_dir)
+    
+    copy_files(sourceList, generatedNames, output_dir)
 
     set_dates([test_file])
 
