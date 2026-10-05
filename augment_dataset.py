@@ -63,8 +63,6 @@ def generate_names(selection, output_dir):
     for i in range (countNumber):
         numericID = random.randint(10,1000) #creates a random numeric ID that will become the copied files name.     
         path = os.path.join(output_dir, str(numericID)+"_"+selection[i])
-        print ("path:", path)
-
         if os.listdir(output_dir) == 0: 
             while numericID in name: #making sure the number has not been picked already. 
                  numericID = random.randint(10,1000)
