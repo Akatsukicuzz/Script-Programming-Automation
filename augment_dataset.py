@@ -65,14 +65,22 @@ def generate_names(selection, output_dir):
     existing = os.listdir(output_dir)
 
     for i in range (len(selection)):
-        numericID = random.randint(10,1000) #creates a random numeric ID that will become the copied files name.     
-        while numericID in name or any(f.startswith(str(numericID) + "_") for f in existing): #making sure the number has not been picked already. 
-                 numericID = random.randint(10,1000)
+        numericID = random.randint(10,1000000) #creates a random numeric ID that will become the copied files name.     
+        while numericID in name or any(f.startswith(str(numericID)) for f in existing): #making sure the number has not been picked already. 
+                 numericID = random.randint(10,1000000)
         
         name.append(numericID)
 
     name.sort() #sort the list is numeric order. 
     return name
+
+def get_extention(path):
+# preserves filename extentions
+    name = os.path.basename(path)
+    if "." in name:
+        return name[name.index("."):]
+    
+    return ""
 
 def copy_files(selection, names, output_dir):
     generated = []
@@ -80,18 +88,20 @@ def copy_files(selection, names, output_dir):
     eligibleFiles = len(selection)
     
     for i in range(eligibleFiles): 
-        # traceableName = selection[i].split("R") #making the file traceable to the source file by including the numeric value from the source file. 
-        traceableName = os.path.basename(selection[i]) #making the file traceable to the source file by including the numeric value from the source file. 
-        destination = os.path.join(output_dir, str(names[i])+"_"+traceableName) 
-
+        destination = os.path.join(output_dir, f"{names[i]:07d}" + get_extention(selection[i])) #added zero padding for true numerical order
+    
         # never overwrite
         if os.path.exists(destination):          
             raise FileExistsError(f"Refusing to overwrite: {destination}")  
  
         shutil.copy2(selection[i],destination)
-        generated.append(destination)           
- 
-    return generated                   
+        generated.append(destination)
+
+        #for progress tracker
+        track_progress(i + 1, eligibleFiles)  
+
+    print()
+    return generated                  
 
 def set_dates(files):
     now = datetime.now()
@@ -130,17 +140,19 @@ def verify_and_report(originals, selection, generated, output_dir, snapshot, tar
 
     counts_ok = (new == n) and (len(os.listdir(output_dir)) == n)
 
-    dates_ok = all(int(os.path.getmtime(f)) == int(target_ts) for f in generated)
-
     originals_ok = all(
         (os.path.getsize(path), os.path.getmtime(path)) == snapshot[path] for path in snapshot)
 
-    numbers = [int(os.path.basename(f).split("_")[0]) for f in generated]
+    numbers = [int(os.path.basename(f).split(".")[0]) for f in generated]
 
     names_ok = (len(set(numbers)) == len(numbers)) and (numbers == sorted(numbers))
     
    
     cycles_ok = verify_cycles(selection)
+
+    actual = [int(os.path.getmtime(f)) for f in generated]
+    dates_ok = all(t == int(target_ts) for t in actual)
+    matching = sum(1 for t in actual if t == int(target_ts))
 
     # summary
     all_ok = counts_ok and dates_ok and originals_ok and names_ok and cycles_ok 
@@ -152,6 +164,8 @@ def verify_and_report(originals, selection, generated, output_dir, snapshot, tar
     print(f"Final dataset size:  {n + new}  (2N)")
     print(f"Output path:         {output_dir}")
     print(f"Target date:         {datetime.fromtimestamp(target_ts)}")
+    print(f"Dates found on disk: {datetime.fromtimestamp(min(actual))} to {datetime.fromtimestamp(max(actual))}")
+    print(f"Files with correct date: {matching}/{new}")
     print(f"Counts OK:           {'PASS' if counts_ok else 'FAIL'}")
     print(f"No cycle repeats:    {'PASS' if cycles_ok else 'FAIL'}") 
     print(f"Dates OK:            {'PASS' if dates_ok else 'FAIL'}")
@@ -169,19 +183,22 @@ def take_snapshot(files):
 
     return snapshot
 
-def write_manifest(selection, generated, dataset_path, manifest_path):
-    # Saved record: new file -> source file -> cycle
+def write_manifest(selection, generated, manifest_path):
+    # Saved record: new file to source file to cycle
     with open(manifest_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["new_file", "source_file", "cycle"])
         for (source, cycle), new_path in zip(selection, generated):
             writer.writerow([
                 os.path.basename(new_path),
-                os.path.relpath(source, dataset_path),
+                os.path.relpath(source),
                 cycle
             ])
 
-
+def track_progress(done, total):
+    #track how much time is left for the copying(it takes a little while)
+    percent = done * 100 // total
+    print(f"\rCopying: {done}/{total} files ({percent}%)", end="", flush=True)
  
 
 def main():
@@ -197,14 +214,14 @@ def main():
 
     #make sure directory exists
     if not os.path.isdir(dataset_path):
-        print(f"Error: The file '{dataset_path}' is not an existing directory.")
+        print(f"Error: The directory '{dataset_path}' is not an existing directory.")
         sys.exit(1)
 
     #using full path
     output_dir = os.path.join(dataset_path, "augmented")
     manifest_path = "augmentation_manifest.csv"
 
-
+    
     print(f"Loading dataset from: {dataset_path}")
 
     eligible_files = list_eligible_files(dataset_path, output_dir)
@@ -228,7 +245,7 @@ def main():
 
     generated = copy_files(sourceList, generatedNames, output_dir)
 
-    write_manifest(selection, generated, dataset_path, manifest_path)
+    write_manifest(selection, generated, manifest_path)
     print(f"Manifest written to: {manifest_path}")
 
     target_ts = set_dates(generated) 
