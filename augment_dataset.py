@@ -208,6 +208,11 @@ def main():
         print("Error: Missing dataset path argument.")
         print("Usage: python augment_dataset.py <path_to_dataset>")
         sys.exit(1)
+        
+    #for when no eligible files
+    if len(eligible_files) == 0:
+        print("Error: no eligible files found.")
+        sys.exit(1)
 
     #extract dataset path
     dataset_path = sys.argv[1]
