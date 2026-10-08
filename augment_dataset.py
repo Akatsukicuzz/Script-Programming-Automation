@@ -62,11 +62,11 @@ def build_selection(sources, needed):
 def generate_names(selection, output_dir):
     name = [] #creating an empyt list that will store the random numeric names.
 
-    existing = os.listdir(output_dir)
+    existing = {f.split(".")[0] for f in os.listdir(output_dir)}
 
     for i in range (len(selection)):
         numericID = random.randint(10,1000000) #creates a random numeric ID that will become the copied files name.     
-        while numericID in name or any(f.startswith(str(numericID)) for f in existing): #making sure the number has not been picked already. 
+        while numericID in name or f"{numericID:07d}" in existing: #making sure the number has not been picked already. 
                  numericID = random.randint(10,1000000)
         
         name.append(numericID)
@@ -183,7 +183,7 @@ def take_snapshot(files):
 
     return snapshot
 
-def write_manifest(selection, generated, manifest_path):
+def write_manifest(selection, generated, dataset_path, manifest_path):
     # Saved record: new file to source file to cycle
     with open(manifest_path, "w", newline="") as f:
         writer = csv.writer(f)
@@ -191,7 +191,7 @@ def write_manifest(selection, generated, manifest_path):
         for (source, cycle), new_path in zip(selection, generated):
             writer.writerow([
                 os.path.basename(new_path),
-                os.path.relpath(source),
+                os.path.relpath(source, dataset_path),
                 cycle
             ])
 
@@ -207,11 +207,6 @@ def main():
     if len(sys.argv) < 2:
         print("Error: Missing dataset path argument.")
         print("Usage: python augment_dataset.py <path_to_dataset>")
-        sys.exit(1)
-        
-    #for when no eligible files
-    if len(eligible_files) == 0:
-        print("Error: no eligible files found.")
         sys.exit(1)
 
     #extract dataset path
@@ -231,6 +226,11 @@ def main():
 
     eligible_files = list_eligible_files(dataset_path, output_dir)
 
+     #for when no eligible files
+    if len(eligible_files) == 0:
+        print("Error: no eligible files found.")
+        sys.exit(1)
+    
     snapshot = take_snapshot(eligible_files)
 
     print("Original file count: N = ", len(eligible_files))
@@ -250,7 +250,7 @@ def main():
 
     generated = copy_files(sourceList, generatedNames, output_dir)
 
-    write_manifest(selection, generated, manifest_path)
+    write_manifest(selection, generated, dataset_path, manifest_path)
     print(f"Manifest written to: {manifest_path}")
 
     target_ts = set_dates(generated) 
